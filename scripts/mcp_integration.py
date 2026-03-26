@@ -78,14 +78,16 @@ class BrightdataMCPServer:
                 log_progress("✓ MCP server killed")
             self.started = False
     
-    def call_tool(self, tool_name: str, params: dict) -> Optional[dict]:
+    def call_tool(self, tool_name: str, **kwargs) -> Optional[dict]:
         """
         Call an MCP tool via JSON-RPC
         
-        Tool examples:
-        - scrape_as_markdown(url)
-        - scrape_batch(urls)
-        - extract(url, schema)
+        Actual Brightdata MCP tools:
+        - scrape_as_markdown(url) -> {"markdown": "..."}
+        - scrape_as_html(url) -> {"html": "..."}
+        - scrape_batch(urls) -> [{"url": "...", "markdown": "..."}]
+        - extract(url, extraction_schema, custom_extraction_prompt) -> {"json": {...}}
+        - search_engine(query, ...) -> results
         """
         if not self.started:
             log_error("MCP server not started", source="mcp_server")
@@ -96,7 +98,7 @@ class BrightdataMCPServer:
             request = {
                 "jsonrpc": "2.0",
                 "method": tool_name,
-                "params": params,
+                "params": kwargs,
                 "id": 1,
             }
             
@@ -126,30 +128,33 @@ class BrightdataMCPServer:
 def scrape_with_mcp(url: str, server: BrightdataMCPServer) -> Optional[str]:
     """
     Scrape a URL using Brightdata MCP scrape_as_markdown tool
+    Returns markdown content
     """
     log_progress(f"Scraping (MCP): {url}")
     
-    result = server.call_tool("scrape_as_markdown", {"url": url})
+    result = server.call_tool("scrape_as_markdown", url=url)
     
     if result:
-        # Result should contain the markdown content
-        return result.get("content") or result.get("markdown") or str(result)
+        # Result structure: {"markdown": "..."}
+        return result.get("markdown") or result.get("content") or str(result)
     
     return None
 
 
-def extract_with_mcp(url: str, schema: dict, server: BrightdataMCPServer) -> Optional[dict]:
+def extract_with_mcp(url: str, extraction_schema: str, server: BrightdataMCPServer) -> Optional[dict]:
     """
     Extract structured data from URL using Brightdata MCP extract tool
+    Returns JSON-structured data based on extraction schema
     """
     log_progress(f"Extracting (MCP): {url}")
     
-    result = server.call_tool("extract", {
-        "url": url,
-        "schema": schema,
-    })
+    result = server.call_tool("extract", url=url, extraction_schema=extraction_schema)
     
-    return result
+    if result:
+        # Result structure: {"json": {...}} or raw dict
+        return result.get("json") or result
+    
+    return None
 
 
 if __name__ == "__main__":
