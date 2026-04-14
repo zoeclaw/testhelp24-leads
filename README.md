@@ -115,6 +115,16 @@ Tiering is optimized for throughput:
 python3 scripts/run_volume_pipeline.py --skip-collect
 ```
 
+### Resume-safe collection behavior
+By default, collection runs **append/merge** into `data/raw_companies.json` and
+checkpoint after each source batch. So if a run gets stopped and restarted, prior
+collected leads are kept.
+
+If you explicitly want to rebuild from scratch, use:
+```bash
+python3 scripts/collect_volume_sources.py --fresh-start
+```
+
 ### Collect + run with Google Maps
 ```bash
 export GOOGLE_MAPS_API_KEY=your_key
