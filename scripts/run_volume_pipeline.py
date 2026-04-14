@@ -8,6 +8,7 @@ Official run order:
 3. Enrich contacts
 4. Discover decision-makers
 5. Score + tier for outreach
+6. Export CSV files to ~/gdrive
 """
 
 import argparse
@@ -37,6 +38,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-enrich", action="store_true")
     parser.add_argument("--skip-decision-makers", action="store_true")
     parser.add_argument("--decision-maker-limit", type=int, default=0)
+    parser.add_argument("--skip-export", action="store_true")
     return parser.parse_args()
 
 
@@ -67,6 +69,30 @@ def main():
         run_step("Discover decision-makers", decision_cmd)
 
     run_step("Score and tier leads", [python, str(SCRIPTS_DIR / "generate_pipeline.py")])
+
+    if not args.skip_export:
+        run_step(
+            "Export final leads CSV",
+            [
+                python,
+                str(SCRIPTS_DIR / "export_csv.py"),
+                "--input",
+                str(BASE_DIR / "data" / "final_leads.json"),
+                "--output",
+                "/home/molt/gdrive/testhelp24_final_leads.csv",
+            ],
+        )
+        run_step(
+            "Export scored leads CSV",
+            [
+                python,
+                str(SCRIPTS_DIR / "export_csv.py"),
+                "--input",
+                str(BASE_DIR / "data" / "pipeline" / "all_leads_scored.json"),
+                "--output",
+                "/home/molt/gdrive/testhelp24_leads_all_scored.csv",
+            ],
+        )
 
     print("\n" + "=" * 78)
     print("✅ Volume-first pipeline complete")

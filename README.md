@@ -53,6 +53,7 @@ Official run order:
 3. **Enrich contacts** from company websites
 4. **Discover decision-makers** from websites as a second pass
 5. **Score + tier** leads for outreach
+6. **Export CSVs** to `~/gdrive`
 
 ## Main Scripts
 
@@ -96,6 +97,10 @@ Official run order:
   - weak backlog / coverage expansion
 - `data/pipeline/action_plan.json`
   - generated operating plan
+- `~/gdrive/testhelp24_final_leads.csv`
+  - exported final leads CSV
+- `~/gdrive/testhelp24_leads_all_scored.csv`
+  - exported scored leads CSV
 
 ## Volume-First Rules
 A lead is considered worth keeping if it has:
@@ -114,6 +119,9 @@ Tiering is optimized for throughput:
 ```bash
 python3 scripts/run_volume_pipeline.py --skip-collect
 ```
+
+CSV export is part of the default run for this project.
+Use `--skip-export` only if you explicitly do not want fresh CSVs.
 
 ### Resume-safe collection behavior
 By default, collection runs **append/merge** into `data/raw_companies.json` and
