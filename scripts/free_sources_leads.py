@@ -88,7 +88,22 @@ TARGET_CITIES = [
     {"name": "Düsseldorf", "population": 621000, "priority": 2},
     {"name": "Dortmund", "population": 587000, "priority": 2},
     {"name": "Essen", "population": 582000, "priority": 2},
-    {"name": "Leipzig", "population": 597000, "priority": 3}
+    {"name": "Leipzig", "population": 597000, "priority": 3},
+    {"name": "Dresden", "population": 563000, "priority": 3},
+    {"name": "Hanover", "population": 535000, "priority": 3},
+    {"name": "Nuremberg", "population": 518000, "priority": 3},
+    {"name": "Duisburg", "population": 501000, "priority": 3},
+    {"name": "Bochum", "population": 364000, "priority": 3},
+    {"name": "Wuppertal", "population": 355000, "priority": 3},
+    {"name": "Bielefeld", "population": 338000, "priority": 3},
+    {"name": "Bonn", "population": 331000, "priority": 3},
+    {"name": "Mannheim", "population": 309000, "priority": 3},
+    {"name": "Karlsruhe", "population": 308000, "priority": 3},
+    {"name": "Augsburg", "population": 301000, "priority": 3},
+    {"name": "Wiesbaden", "population": 278000, "priority": 3},
+    {"name": "Gelsenkirchen", "population": 260000, "priority": 3},
+    {"name": "Potsdam", "population": 187000, "priority": 3},
+    {"name": "Bremen", "population": 569000, "priority": 2}
 ]
 
 
