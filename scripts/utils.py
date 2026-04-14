@@ -1,16 +1,19 @@
 """
-Shared utilities for lead generation pipeline.
+Shared utilities for the lead generation pipeline.
 
-Default strategy profile is volume-first:
-- keep partially-complete leads when they have enough signal to be useful
-- merge duplicate records to preserve the richest combined company profile
-- normalize schema differences across sources (for example city vs location)
+Volume-first defaults:
+- keep partially complete records when they have enough signal to matter
+- merge duplicates into the richest combined profile
+- normalize all incoming records to the canonical schema
 """
+
 import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
+
+from schema import clean_text, normalize_lead
 
 # Base paths
 BASE_DIR = Path(__file__).parent.parent
@@ -26,29 +29,13 @@ FINAL_LEADS_FILE = DATA_DIR / "final_leads.json"
 PROGRESS_LOG = LOGS_DIR / "progress.log"
 ERRORS_LOG = LOGS_DIR / "errors.log"
 
-BASE_COMPANY_FIELDS = {
-    "company_name",
-    "address",
-    "city",
-    "phone",
-    "email",
-    "website",
-    "company_size",
-    "contact_person",
-    "source",
-    "status",
-    "enriched_at",
-}
-
 
 def ensure_dirs():
-    """Create necessary directories."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def log_progress(message: str, source: str = "system"):
-    """Log progress to file and console."""
     ensure_dirs()
     timestamp = datetime.now().isoformat()
     log_entry = f"[{timestamp}] [{source}] {message}"
@@ -58,7 +45,6 @@ def log_progress(message: str, source: str = "system"):
 
 
 def log_error(message: str, source: str = "system", exception: Exception = None):
-    """Log error to file."""
     ensure_dirs()
     timestamp = datetime.now().isoformat()
     error_entry = f"[{timestamp}] [{source}] {message}"
@@ -70,19 +56,18 @@ def log_error(message: str, source: str = "system", exception: Exception = None)
 
 
 def load_json(filepath: Path) -> List[Dict]:
-    """Load JSON data, return empty list if file doesn't exist."""
     if not filepath.exists():
         return []
     try:
         with open(filepath, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+        return data if isinstance(data, list) else []
     except Exception as e:
         log_error(f"Failed to load {filepath}", exception=e)
         return []
 
 
 def save_json(filepath: Path, data: List[Dict], append: bool = False):
-    """Save JSON data. If append=True, merge with existing."""
     ensure_dirs()
     if append and filepath.exists():
         existing = load_json(filepath)
@@ -92,15 +77,8 @@ def save_json(filepath: Path, data: List[Dict], append: bool = False):
     log_progress(f"Saved {len(data)} records to {filepath.name}")
 
 
-def _clean_text(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value).strip()
-
-
 def extract_domain(url: str) -> str:
-    """Normalize a website into a comparable domain key."""
-    cleaned = _clean_text(url)
+    cleaned = clean_text(url)
     if not cleaned:
         return ""
     if not cleaned.startswith(("http://", "https://")):
@@ -116,62 +94,35 @@ def extract_domain(url: str) -> str:
 
 
 def normalize_company(company: Dict) -> Dict:
-    """Normalize company data while preserving source-specific enrichment fields."""
-    normalized = {
-        "company_name": _clean_text(company.get("company_name") or company.get("name")),
-        "address": _clean_text(company.get("address")),
-        "city": _clean_text(company.get("city") or company.get("location")),
-        "phone": _clean_text(company.get("phone") or company.get("formatted_phone_number")),
-        "email": _clean_text(company.get("email")),
-        "website": _clean_text(company.get("website")),
-        "company_size": _clean_text(company.get("company_size")),
-        "contact_person": _clean_text(company.get("contact_person") or company.get("decision_maker")),
-        "source": _clean_text(company.get("source")) or "unknown",
-        "status": _clean_text(company.get("status")),
-        "enriched_at": _clean_text(company.get("enriched_at")),
-    }
-
-    for key, value in company.items():
-        if key not in normalized:
-            normalized[key] = value
-
-    if "location" not in normalized and normalized["city"]:
-        normalized["location"] = normalized["city"]
-
-    return normalized
+    return normalize_lead(company)
 
 
 def validate_company(company: Dict) -> bool:
-    """Volume-first validation: keep leads with a company name plus any meaningful location/contact signal."""
-    company_name = _clean_text(company.get("company_name"))
-    locality_signal = any(
-        _clean_text(company.get(field))
-        for field in ("city", "location", "address")
-    )
-    contact_signal = any(
-        _clean_text(company.get(field))
-        for field in ("phone", "email", "website")
-    )
+    normalized = normalize_company(company)
+    company_name = clean_text(normalized.get("company_name"))
+    locality_signal = any(clean_text(normalized.get(field)) for field in ("city", "location", "address"))
+    contact_signal = any(clean_text(normalized.get(field)) for field in ("phone", "email", "website"))
     return bool(company_name and (locality_signal or contact_signal))
 
 
 def _score_value(field: str, value: Any) -> int:
-    """Score a field value so richer records win during merges."""
     if value in (None, "", [], {}):
         return 0
     if isinstance(value, list):
-        return len(value) * 5
+        return len(value) * 8
+    if isinstance(value, dict):
+        return len(value) * 4
     if isinstance(value, (int, float)):
         return 5
 
-    text = _clean_text(value)
+    text = clean_text(value)
     if not text:
         return 0
 
     score = len(text)
     if field in {"email", "phone", "website", "address", "contact_person"}:
         score += 20
-    if field in {"company_size", "status", "source"}:
+    if field in {"company_size", "status", "lead_stage", "source", "source_type"}:
         score += 5
     return score
 
@@ -179,7 +130,7 @@ def _score_value(field: str, value: Any) -> int:
 def _merge_lists(existing: List[Any], incoming: List[Any]) -> List[Any]:
     seen = set()
     merged = []
-    for item in existing + incoming:
+    for item in (existing or []) + (incoming or []):
         key = json.dumps(item, ensure_ascii=False, sort_keys=True) if isinstance(item, (dict, list)) else str(item)
         if key not in seen:
             seen.add(key)
@@ -188,7 +139,6 @@ def _merge_lists(existing: List[Any], incoming: List[Any]) -> List[Any]:
 
 
 def merge_company_records(existing: Dict, incoming: Dict) -> Dict:
-    """Merge two company records, keeping the richest combined record."""
     left = normalize_company(existing)
     right = normalize_company(incoming)
     merged = dict(left)
@@ -200,9 +150,18 @@ def merge_company_records(existing: Dict, incoming: Dict) -> Dict:
             merged[key] = _merge_lists(existing_value or [], incoming_value or [])
             continue
 
-        if key == "source":
-            sources = [s for s in [left.get("source"), right.get("source")] if _clean_text(s)]
-            merged[key] = ", ".join(dict.fromkeys(sources)) if sources else "unknown"
+        if isinstance(existing_value, dict) or isinstance(incoming_value, dict):
+            merged[key] = {**(existing_value or {}), **(incoming_value or {})}
+            continue
+
+        if key in {"source", "source_type"}:
+            merged_values = []
+            for value in [left.get(key), right.get(key)]:
+                for part in clean_text(value).split(","):
+                    part = clean_text(part)
+                    if part and part not in merged_values:
+                        merged_values.append(part)
+            merged[key] = ", ".join(merged_values) if merged_values else "unknown"
             continue
 
         if key in {"review_count", "rating"}:
@@ -218,22 +177,21 @@ def merge_company_records(existing: Dict, incoming: Dict) -> Dict:
     if merged.get("city") and not merged.get("location"):
         merged["location"] = merged["city"]
 
-    if merged.get("additional_emails") and not isinstance(merged["additional_emails"], list):
-        merged["additional_emails"] = [merged["additional_emails"]]
-
-    return merged
+    return normalize_company(merged)
 
 
 def company_fingerprints(company: Dict) -> List[str]:
-    """Generate matching keys used to merge duplicates without collapsing distinct branches."""
-    company_name = _clean_text(company.get("company_name")).lower()
-    city = _clean_text(company.get("city") or company.get("location")).lower()
-    address = _clean_text(company.get("address")).lower()
-    phone = _clean_text(company.get("phone")).lower()
-    domain = extract_domain(company.get("website", ""))
+    normalized = normalize_company(company)
+    company_name = clean_text(normalized.get("company_name")).lower()
+    city = clean_text(normalized.get("city") or normalized.get("location")).lower()
+    address = clean_text(normalized.get("address")).lower()
+    phone = clean_text(normalized.get("phone")).lower()
+    domain = extract_domain(normalized.get("website", ""))
 
     fingerprints: List[str] = []
-    if domain:
+    if domain and city:
+        fingerprints.append(f"domain_city:{domain}|{city}")
+    elif domain:
         fingerprints.append(f"domain:{domain}")
     if company_name and city:
         fingerprints.append(f"name_city:{company_name}|{city}")
@@ -245,14 +203,15 @@ def company_fingerprints(company: Dict) -> List[str]:
 
 
 def deduplicate_companies(companies: List[Dict]) -> List[Dict]:
-    """Merge duplicate companies and keep the richest combined record."""
     deduplicated: List[Dict] = []
     fingerprint_to_index: Dict[str, int] = {}
 
     for raw_company in companies:
         company = normalize_company(raw_company)
-        fingerprints = company_fingerprints(company)
+        if not validate_company(company):
+            continue
 
+        fingerprints = company_fingerprints(company)
         match_index: Optional[int] = None
         for fingerprint in fingerprints:
             if fingerprint in fingerprint_to_index:

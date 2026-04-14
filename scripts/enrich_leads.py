@@ -15,6 +15,7 @@ from urllib.parse import urljoin
 
 import requests
 
+from schema import merge_unique_strings
 from utils import deduplicate_companies, merge_company_records, normalize_company
 
 
@@ -119,8 +120,9 @@ class LeadEnricher:
                         lead['email'] = emails[0]
                     if len(emails) > 1:
                         existing_additional = lead.get('additional_emails', []) or []
-                        lead['additional_emails'] = list(dict.fromkeys(existing_additional + emails[1:]))[:5]
+                        lead['additional_emails'] = merge_unique_strings(existing_additional + emails[1:])[:5]
 
+            lead['lead_stage'] = 'contact_enriched'
             lead['status'] = 'enriched'
             lead['enriched_at'] = datetime.now().isoformat()
             self.enriched_count += 1

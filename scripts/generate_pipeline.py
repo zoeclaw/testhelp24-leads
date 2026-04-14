@@ -21,7 +21,8 @@ class LeadScorer:
             'has_location': 10,
             'company_size': 10,
             'enrichment_status': 5,
-            'source_confidence': 10,
+            'source_confidence': 5,
+            'decision_maker': 10,
         }
 
     def score_lead(self, lead: dict) -> float:
@@ -52,6 +53,9 @@ class LeadScorer:
         if lead.get('source') and lead.get('source') != 'unknown':
             score += self.weights['source_confidence']
 
+        if lead.get('contact_person') or lead.get('decision_makers'):
+            score += self.weights['decision_maker']
+
         return min(score, 100)
 
     def categorize_by_tier(self, leads: List[dict]) -> Dict[str, List[dict]]:
@@ -68,11 +72,19 @@ class LeadScorer:
             has_phone = bool(lead.get('phone'))
             has_locality = bool(lead.get('city') or lead.get('location') or lead.get('address'))
 
+            has_decision_maker = bool(lead.get('contact_person') or lead.get('decision_makers'))
+
             if has_email or has_phone or has_website:
+                if has_decision_maker:
+                    lead['outreach_priority'] = 'tier_1_named_contact'
+                else:
+                    lead['outreach_priority'] = 'tier_1_general_contact'
                 tiers['tier_1_ready'].append(lead)
             elif has_locality:
+                lead['outreach_priority'] = 'tier_2_partial'
                 tiers['tier_2_partial'].append(lead)
             else:
+                lead['outreach_priority'] = 'tier_3_todo'
                 tiers['tier_3_todo'].append(lead)
 
         return tiers
@@ -135,6 +147,7 @@ def main():
         "by_tier": {
             "tier_1_ready": {
                 "count": len(tiers['tier_1_ready']),
+                "named_contact_count": len([lead for lead in tiers['tier_1_ready'] if lead.get('contact_person') or lead.get('decision_makers')]),
                 "action": "Start outreach immediately using any available channel",
                 "channels": ["Email", "Phone", "Website contact form"],
                 "priority": "HIGH"

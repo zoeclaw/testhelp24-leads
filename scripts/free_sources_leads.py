@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
 Free lead generation from public German sources.
-Uses LinkedIn free search, web scraping, and manual directory lookups.
+Uses canonical schema so bootstrap leads flow cleanly into the main pipeline.
 """
 
 import os
 import json
-import re
 from datetime import datetime
 
-# Known major German staffing companies to bootstrap with
+from schema import make_lead_record
+
 MAJOR_STAFFING_COMPANIES = {
     "Adecco": {
         "website": "https://www.adecco.de",
@@ -45,7 +45,6 @@ MAJOR_STAFFING_COMPANIES = {
     }
 }
 
-# German business directories (public, free access)
 DIRECTORIES = {
     "DIHK-IHK": {
         "url": "https://www.dihk.de",
@@ -61,7 +60,6 @@ DIRECTORIES = {
     }
 }
 
-# Websites with staffing company lists
 LISTING_SITES = [
     {
         "name": "Yellow Pages Germany (Das Telefonbuch)",
@@ -80,7 +78,6 @@ LISTING_SITES = [
     }
 ]
 
-# Cities to target (by employee density, high turnover sectors)
 TARGET_CITIES = [
     {"name": "Berlin", "population": 3645000, "priority": 1},
     {"name": "Munich", "population": 1484000, "priority": 1},
@@ -94,44 +91,46 @@ TARGET_CITIES = [
     {"name": "Leipzig", "population": 597000, "priority": 3}
 ]
 
+
 def generate_lead_template(company_name: str, city: str = "", website: str = "", notes: str = "") -> dict:
-    """Generate a lead record template."""
-    return {
-        "company_name": company_name,
-        "city": city,
-        "website": website,
-        "phone": "",
-        "email": "",
-        "address": "",
-        "company_size": "",
-        "contact_person": "",
-        "notes": notes,
-        "source": "Manual-Research",
-        "status": "to_enrich",
-        "enriched_at": ""
-    }
+    return make_lead_record(
+        company_name=company_name,
+        source="Bootstrap",
+        source_type="seed",
+        city=city,
+        location=city,
+        website=website,
+        phone="",
+        email="",
+        address="",
+        company_size="",
+        contact_person="",
+        notes=notes,
+        lead_stage="seeded",
+        status="to_enrich",
+        source_metadata={"strategy": "volume_first"},
+    )
+
 
 def generate_bootstrap_leads() -> list:
-    """Generate initial lead list from known sources."""
     leads = []
-    
-    # Add major companies with placeholder for branches
     for company, info in MAJOR_STAFFING_COMPANIES.items():
         for city in TARGET_CITIES:
-            lead = generate_lead_template(
-                company_name=company,
-                city=city["name"],
-                website=info.get("website", ""),
-                notes=f"{info.get('note')} - Branch in {city['name']}"
+            leads.append(
+                generate_lead_template(
+                    company_name=company,
+                    city=city["name"],
+                    website=info.get("website", ""),
+                    notes=f"{info.get('note')} - Branch in {city['name']}"
+                )
             )
-            leads.append(lead)
-    
     return leads
 
+
 def generate_research_tasks() -> dict:
-    """Generate a research checklist for manual/semi-automated lookup."""
     return {
         "title": "Lead Research & Enrichment Tasks",
+        "strategy": "volume_first",
         "generated_at": datetime.now().isoformat(),
         "tasks": [
             {
@@ -172,38 +171,35 @@ def generate_research_tasks() -> dict:
         ]
     }
 
+
 def main():
     print("=" * 70)
     print("🔍 German Staffing Leads - Free Source Research")
     print("=" * 70)
     print()
-    
-    # Generate bootstrap leads
+
     print("📋 Generating bootstrap leads from major companies...")
     bootstrap_leads = generate_bootstrap_leads()
     print(f"   ✓ Created {len(bootstrap_leads)} lead records (major companies × cities)")
     print()
-    
-    # Save bootstrap leads
+
     output_file = "/home/molt/devspace/testhelp24-leads/data/bootstrap_leads.json"
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
-    
+
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(bootstrap_leads, f, ensure_ascii=False, indent=2)
     print(f"✓ Saved bootstrap leads to {output_file}")
     print()
-    
-    # Generate research tasks
+
     print("🎯 Generating research tasks for enrichment...")
     research_tasks = generate_research_tasks()
-    
+
     tasks_file = "/home/molt/devspace/testhelp24-leads/data/research_tasks.json"
     with open(tasks_file, "w", encoding="utf-8") as f:
         json.dump(research_tasks, f, ensure_ascii=False, indent=2)
     print(f"✓ Saved research tasks to {tasks_file}")
     print()
-    
-    # Print directories to check manually
+
     print("📚 Recommended directories to check:")
     print("-" * 70)
     for dir_name, dir_info in DIRECTORIES.items():
@@ -211,7 +207,7 @@ def main():
         print(f"    {dir_info.get('url')}")
         print(f"    Note: {dir_info.get('note')}")
         print()
-    
+
     print("🔗 Listing sites with directory search:")
     print("-" * 70)
     for site in LISTING_SITES:
@@ -220,8 +216,7 @@ def main():
         if site.get('search'):
             print(f"    Search: {site.get('search')}")
         print()
-    
-    # Summary statistics
+
     print("=" * 70)
     print("📊 Summary")
     print("=" * 70)
@@ -231,11 +226,12 @@ def main():
     print(f"✓ Research tasks: {len(research_tasks['tasks'])}")
     print()
     print("Next steps:")
-    print("1. Review research_tasks.json for priority actions")
-    print("2. Manually search directories OR use web APIs")
-    print("3. Enrich bootstrap_leads.json with contact details")
-    print("4. Use Google Maps API script for verification & enrichment")
+    print("1. Run collect_volume_sources.py or run_volume_pipeline.py")
+    print("2. Enrich bootstrap and scraped leads")
+    print("3. Discover decision-makers as a second pass")
+    print("4. Use scored tiers for outreach")
     print()
+
 
 if __name__ == "__main__":
     main()
